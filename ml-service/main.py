@@ -248,12 +248,8 @@ def parse_caption_to_structured(caption: str, colors: List[str], brightness: str
 
     confidence = "high" if len(caption.split()) > 10 else "medium"
 
-    color_text = ", ".join(colors) if colors else "unknown color"
-    material_text = f" made of {detected_material}" if detected_material else ""
-    enhanced_desc = f"A {brightness} {color_text} {object_type}{material_text}. {caption}"
-
     return ImageDescription(
-        description=enhanced_desc,
+        description=caption,
         object_type=object_type,
         colors=colors,
         material=detected_material,
