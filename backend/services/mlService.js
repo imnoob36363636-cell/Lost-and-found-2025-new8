@@ -21,7 +21,6 @@ const generateImageCaption = async (imageBuffer) => {
     }
   } catch (error) {
     console.error('ML Service caption error:', error.message);
-    // Return null to allow graceful degradation
     return null;
   }
 };
@@ -84,6 +83,8 @@ const performSemanticSearch = async (query, items) => {
       {
         query,
         item_descriptions: itemDescriptions,
+        threshold: 0.3,
+        use_hybrid: true
       },
       { timeout: ML_TIMEOUT }
     );

@@ -70,6 +70,12 @@ const itemSchema = new mongoose.Schema(
     embedding: {
       type: [Number],
       default: [],
+      validate: {
+        validator: function(arr) {
+          return arr.length === 0 || arr.length === 768;
+        },
+        message: 'Embedding must be 768 dimensions (Gemini text-embedding-004)'
+      }
     },
     embeddingGenerated: {
       type: Boolean,
