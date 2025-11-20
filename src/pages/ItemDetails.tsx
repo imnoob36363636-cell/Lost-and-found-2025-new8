@@ -13,6 +13,15 @@ interface RawUserObj {
   email?: string;
 }
 
+interface SimilarItem {
+  id: string;
+  title: string;
+  imageUrl: string;
+  category: string;
+  similarity: number;
+  link: string;
+}
+
 interface ItemDetails {
   id: string;
   _id?: string;
@@ -43,6 +52,7 @@ const ItemDetails = () => {
   const [loading, setLoading] = useState(true);
   const [showVerification, setShowVerification] = useState(false);
   const [chatRequestStatus, setChatRequestStatus] = useState<any>(null);
+  const [similarItems, setSimilarItems] = useState<SimilarItem[]>([]);
 
   /**
    * normalizeFetchedItem handles cases where raw.user can be:
@@ -128,6 +138,10 @@ const ItemDetails = () => {
         setItem(null);
       } else {
         setItem(normalized);
+        // Set similar items from response
+        if (response.data.similarItems && Array.isArray(response.data.similarItems)) {
+          setSimilarItems(response.data.similarItems);
+        }
         // Fetch chat request status if user is logged in
         if (user && routeId) {
           fetchChatRequestStatus(routeId);
@@ -347,6 +361,40 @@ const ItemDetails = () => {
             fetchChatRequestStatus(String(item.id ?? item._id ?? ''));
           }}
         />
+      )}
+
+      {similarItems && similarItems.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">AI Suggested Similar Items</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {similarItems.map((simItem) => (
+              <div
+                key={simItem.id}
+                onClick={() => navigate(simItem.link)}
+                className="bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
+              >
+                <div className="relative h-40 bg-gray-200 overflow-hidden">
+                  <img
+                    src={simItem.imageUrl || 'https://via.placeholder.com/400x300?text=No+Image'}
+                    alt={simItem.title}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                  />
+                </div>
+                <div className="p-3">
+                  <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-1">{simItem.title}</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      {simItem.category}
+                    </span>
+                    <span className="text-xs font-bold text-green-600">
+                      {(simItem.similarity * 100).toFixed(0)}% match
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

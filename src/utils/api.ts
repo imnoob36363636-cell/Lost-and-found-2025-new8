@@ -33,7 +33,7 @@ api.interceptors.response.use(
   }
 );
 
-export const uploadImage = async (file: File): Promise<{ url: string; aiCaption?: string } | string> => {
+export const uploadImage = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
   const response = await api.post('/upload', formData, {
@@ -42,12 +42,5 @@ export const uploadImage = async (file: File): Promise<{ url: string; aiCaption?
     },
   });
 
-  // Return full response object if it has aiCaption, otherwise just the URL for backward compatibility
-  if (response.data.aiCaption) {
-    return {
-      url: response.data.url,
-      aiCaption: response.data.aiCaption
-    };
-  }
   return response.data.url;
 };

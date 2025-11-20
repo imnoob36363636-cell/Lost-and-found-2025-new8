@@ -1,22 +1,20 @@
 const Item = require('../models/Item');
 const { uploadToCloudinary } = require('../services/storageService');
-const { generateTextEmbedding } = require('../services/mlService');
+const { generateTextEmbedding, computeSimilarity } = require('../services/mlService');
 
 const createItem = async (req, res) => {
   try {
-    const { title, description, category, location, type, imageUrl, verificationQuestion, verificationAnswer, aiGeneratedDescription } = req.body;
+    const { title, description, category, location, type, imageUrl, verificationQuestion, verificationAnswer } = req.body;
 
     // Combine text for embedding generation
     const textForEmbedding = `${title} ${description} ${category} ${location}`;
 
     // Generate embedding (non-blocking fallback)
     let embedding = [];
-    let embeddingGenerated = false;
     try {
       const generatedEmbedding = await generateTextEmbedding(textForEmbedding);
       if (generatedEmbedding) {
         embedding = generatedEmbedding;
-        embeddingGenerated = true;
       }
     } catch (mlError) {
       console.error('Embedding generation failed:', mlError);
@@ -33,9 +31,7 @@ const createItem = async (req, res) => {
       imageUrl: imageUrl || '',
       verificationQuestion: verificationQuestion || '',
       verificationAnswer: verificationAnswer?.toLowerCase?.()?.trim?.() ?? '',
-      aiGeneratedDescription: aiGeneratedDescription || '',
       embedding,
-      embeddingGenerated,
     });
 
     const populatedItem = await Item.findById(item._id).populate('user', 'name email');
@@ -74,7 +70,49 @@ const getItemById = async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
 
-    res.json({ item });
+    // Find similar items based on embedding similarity
+    let similarItems = [];
+    if (item.embedding && item.embedding.length === 768) {
+      try {
+        const allItems = await Item.find({ _id: { $ne: item._id }, status: 'active' })
+          .populate('user', 'name email')
+          .lean()
+          .limit(100);
+
+        const similarities = [];
+
+        for (const otherItem of allItems) {
+          if (otherItem.embedding && otherItem.embedding.length === 768) {
+            const similarity = await computeSimilarity(item.embedding, otherItem.embedding);
+            if (similarity !== null && similarity >= 0.40) {
+              similarities.push({
+                item: otherItem,
+                similarity: Math.round(similarity * 1000) / 1000
+              });
+            }
+          }
+        }
+
+        // Sort by similarity descending and take top 5
+        similarities.sort((a, b) => b.similarity - a.similarity);
+        similarItems = similarities.slice(0, 5).map(s => ({
+          id: s.item._id.toString(),
+          title: s.item.title,
+          imageUrl: s.item.imageUrl,
+          category: s.item.category,
+          similarity: s.similarity,
+          link: `/item/${s.item._id.toString()}`
+        }));
+      } catch (err) {
+        console.error('Error computing similar items:', err);
+        // Continue without similar items
+      }
+    }
+
+    res.json({
+      item,
+      similarItems
+    });
   } catch (error) {
     console.error('getItemById error:', error);
     res.status(500).json({ message: error.message });

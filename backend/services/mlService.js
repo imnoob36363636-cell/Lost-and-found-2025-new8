@@ -1,29 +1,7 @@
 const axios = require('axios');
-const FormData = require('form-data');
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 const ML_TIMEOUT = 30000;
-
-const generateImageCaption = async (imageBuffer) => {
-  try {
-    const formData = new FormData();
-    formData.append('file', imageBuffer, { filename: 'image.jpg' });
-
-    const response = await axios.post(`${ML_SERVICE_URL}/caption`, formData, {
-      headers: formData.getHeaders(),
-      timeout: ML_TIMEOUT,
-    });
-
-    if (response.data.success) {
-      return response.data.caption;
-    } else {
-      throw new Error('Caption generation failed');
-    }
-  } catch (error) {
-    console.error('ML Service caption error:', error.message);
-    return null;
-  }
-};
 
 const generateTextEmbedding = async (text) => {
   try {
@@ -100,6 +78,28 @@ const performSemanticSearch = async (query, items) => {
   }
 };
 
+const computeSimilarity = async (embeddingA, embeddingB) => {
+  try {
+    const response = await axios.post(
+      `${ML_SERVICE_URL}/similarity`,
+      {
+        embedding_a: embeddingA,
+        embedding_b: embeddingB
+      },
+      { timeout: ML_TIMEOUT }
+    );
+
+    if (response.data.success) {
+      return response.data.similarity;
+    } else {
+      throw new Error('Similarity computation failed');
+    }
+  } catch (error) {
+    console.error('ML Service similarity error:', error.message);
+    return null;
+  }
+};
+
 const checkMLServiceHealth = async () => {
   try {
     const response = await axios.get(`${ML_SERVICE_URL}/health`, {
@@ -113,9 +113,9 @@ const checkMLServiceHealth = async () => {
 };
 
 module.exports = {
-  generateImageCaption,
   generateTextEmbedding,
   generateBatchEmbeddings,
   performSemanticSearch,
+  computeSimilarity,
   checkMLServiceHealth,
 };

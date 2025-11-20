@@ -63,10 +63,6 @@ const itemSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    aiGeneratedDescription: {
-      type: String,
-      default: '',
-    },
     embedding: {
       type: [Number],
       default: [],
@@ -76,10 +72,6 @@ const itemSchema = new mongoose.Schema(
         },
         message: 'Embedding must be 768 dimensions (Gemini text-embedding-004)'
       }
-    },
-    embeddingGenerated: {
-      type: Boolean,
-      default: false,
     },
   },
   { timestamps: true }

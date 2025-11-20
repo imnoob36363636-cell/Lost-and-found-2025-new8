@@ -15,15 +15,13 @@ const UploadItem = () => {
   const [verificationQuestion, setVerificationQuestion] = useState('');
   const [verificationAnswer, setVerificationAnswer] = useState('');
   const [loading, setLoading] = useState(false);
-  const [aiCaption, setAiCaption] = useState('');
-  const [generatingCaption, setGeneratingCaption] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   const categories = ['Electronics', 'Clothing', 'Accessories', 'Books', 'ID Cards', 'Keys', 'Other'];
   const locations = ['Library', 'Hostel', 'Canteen', 'Academic Block', 'Sports Complex', 'Auditorium', 'Other'];
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setImage(file);
@@ -32,24 +30,6 @@ const UploadItem = () => {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-
-      // Generate AI caption for the image
-      setGeneratingCaption(true);
-      setAiCaption('');
-      try {
-        const response = await uploadImage(file);
-        if (response.aiCaption) {
-          setAiCaption(response.aiCaption);
-          if (!description) {
-            setDescription(response.aiCaption);
-          }
-          showToast('AI description generated!', 'success');
-        }
-      } catch (error) {
-        console.error('AI caption generation failed:', error);
-      } finally {
-        setGeneratingCaption(false);
-      }
     }
   };
 
@@ -60,8 +40,7 @@ const UploadItem = () => {
     try {
       let imageUrl = '';
       if (image) {
-        const uploadResponse = await uploadImage(image);
-        imageUrl = typeof uploadResponse === 'string' ? uploadResponse : uploadResponse.url;
+        imageUrl = await uploadImage(image);
       }
 
       await api.post('/items', {
@@ -73,7 +52,6 @@ const UploadItem = () => {
         imageUrl,
         verificationQuestion,
         verificationAnswer,
-        aiGeneratedDescription: aiCaption,
       });
 
       showToast('Item uploaded successfully!', 'success');
@@ -175,18 +153,6 @@ const UploadItem = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Provide detailed description..."
             />
-            {generatingCaption && (
-              <p className="text-xs text-blue-600 mt-1 flex items-center">
-                <span className="animate-spin mr-2">⟳</span>
-                Generating AI description from image...
-              </p>
-            )}
-            {aiCaption && !generatingCaption && (
-              <p className="text-xs text-green-600 mt-1">
-                AI description generated! You can edit it above.
-              </p>
-            )}
-            <p className="text-xs text-gray-500 mt-1">AI will generate description from uploaded image</p>
           </div>
 
           <div className="border-t pt-6">

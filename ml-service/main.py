@@ -5,18 +5,15 @@ Python 3.13 compatible.
 """
 
 import os
-import io
-import json
 import logging
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from collections import OrderedDict
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from PIL import Image
 import numpy as np
 import httpx
 import google.generativeai as genai
@@ -26,9 +23,6 @@ logger = logging.getLogger("ml_service")
 
 # Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-HF_API_TOKEN = os.getenv("HF_API_TOKEN", "").strip()
-HF_MODEL = os.getenv("HF_MODEL", "Salesforce/blip2-opt-2.7b").strip()
-HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 EMBEDDING_DIMENSION = 768
 CACHE_TTL_SECONDS = 3600
 
@@ -37,8 +31,8 @@ if GEMINI_API_KEY:
 
 app = FastAPI(
     title="Lost & Found ML Service",
-    description="HuggingFace + Google Gemini powered image analysis and semantic search",
-    version="2.0.0"
+    description="Google Gemini text embeddings and semantic search",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -62,14 +56,9 @@ class SearchRequest(BaseModel):
     threshold: Optional[float] = Field(default=0.3, ge=0.0, le=1.0)
     use_hybrid: Optional[bool] = Field(default=True)
 
-class ImageDescription(BaseModel):
-    description: str
-    object_type: str
-    colors: List[str]
-    material: Optional[str]
-    condition: str
-    tags: List[str]
-    confidence: str
+class SimilarityRequest(BaseModel):
+    embedding_a: List[float] = Field(..., min_items=768, max_items=768)
+    embedding_b: List[float] = Field(..., min_items=768, max_items=768)
 
 # Shared HTTP client for connection pooling
 http_client: Optional[httpx.AsyncClient] = None
@@ -126,137 +115,9 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
         return 0.0
     return float(np.dot(a_np, b_np) / (norm_a * norm_b))
 
-def extract_colors_from_image(image: Image.Image) -> Tuple[List[str], str]:
-    """Extract dominant colors and brightness from image."""
-    img_small = image.resize((100, 100))
-    arr = np.array(img_small)
-    avg_color = arr.mean(axis=(0, 1))
-    r, g, b = avg_color
-
-    colors = []
-    if r > 180 and g < 100 and b < 100:
-        colors.append("red")
-    if r < 100 and g > 180 and b < 100:
-        colors.append("green")
-    if r < 100 and g < 100 and b > 180:
-        colors.append("blue")
-    if r > 180 and g > 180 and b < 100:
-        colors.append("yellow")
-    if r > 150 and g < 100 and b > 150:
-        colors.append("purple")
-    if r < 100 and g > 150 and b > 150:
-        colors.append("cyan")
-    if r > 200 and g > 200 and b > 200:
-        colors.append("white")
-    if r < 80 and g < 80 and b < 80:
-        colors.append("black")
-    if 100 < r < 180 and 50 < g < 130 and 20 < b < 80:
-        colors.append("brown")
-    if len(colors) == 0:
-        if r > 150 or g > 150 or b > 150:
-            colors.append("light")
-        else:
-            colors.append("dark")
-
-    brightness = float(avg_color.mean())
-    brightness_level = "bright" if brightness > 150 else "medium" if brightness > 80 else "dark"
-
-    return colors, brightness_level
-
 def normalize_text_for_cache(text: str) -> str:
     """Normalize short text for caching."""
     return text.strip().lower()[:500]
-
-# HuggingFace Inference API
-async def generate_hf_image_caption(image_bytes: bytes, timeout: float = 30.0) -> Optional[str]:
-    """Generate detailed image caption using HuggingFace Inference API."""
-    if not HF_API_TOKEN:
-        logger.warning("HF_API_TOKEN not configured")
-        return None
-
-    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-
-    try:
-        async with http_client.post(
-            HF_API_URL,
-            headers=headers,
-            content=image_bytes,
-            timeout=timeout
-        ) as response:
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list) and len(data) > 0:
-                    first = data[0]
-                    if isinstance(first, dict):
-                        return first.get("generated_text") or first.get("caption")
-                    if isinstance(first, str):
-                        return first
-                if isinstance(data, dict):
-                    return data.get("generated_text") or data.get("caption")
-            else:
-                logger.warning(f"HF API error {response.status_code}: {response.text}")
-    except Exception as e:
-        logger.error(f"HF API exception: {e}")
-
-    return None
-
-def parse_caption_to_structured(caption: str, colors: List[str], brightness: str) -> ImageDescription:
-    """Parse HF caption into structured rich description with tags."""
-    caption_lower = caption.lower()
-
-    common_objects = [
-        "phone", "wallet", "bag", "backpack", "laptop", "notebook", "book",
-        "keys", "card", "watch", "glasses", "bottle", "umbrella", "charger",
-        "headphones", "earbuds", "jacket", "shirt", "pants", "shoes", "hat",
-        "scarf", "gloves", "belt", "ring", "bracelet", "necklace"
-    ]
-
-    object_type = "item"
-    for obj in common_objects:
-        if obj in caption_lower:
-            object_type = obj
-            break
-
-    materials = ["leather", "plastic", "metal", "fabric", "paper", "wood", "glass"]
-    detected_material = None
-    for mat in materials:
-        if mat in caption_lower:
-            detected_material = mat
-            break
-
-    condition_words = {
-        "new": ["new", "pristine", "mint"],
-        "good": ["good", "clean", "neat"],
-        "worn": ["worn", "used", "old"],
-        "damaged": ["damaged", "broken", "torn"]
-    }
-
-    condition = "good"
-    for cond, keywords in condition_words.items():
-        if any(kw in caption_lower for kw in keywords):
-            condition = cond
-            break
-
-    tags = list(set(colors + [object_type, brightness]))
-    if detected_material:
-        tags.append(detected_material)
-
-    context_keywords = ["outdoor", "indoor", "table", "floor", "hand", "pocket", "bag"]
-    for keyword in context_keywords:
-        if keyword in caption_lower:
-            tags.append(keyword)
-
-    confidence = "high" if len(caption.split()) > 10 else "medium"
-
-    return ImageDescription(
-        description=caption,
-        object_type=object_type,
-        colors=colors,
-        material=detected_material,
-        condition=condition,
-        tags=tags[:15],
-        confidence=confidence
-    )
 
 # Google Gemini Embeddings
 async def generate_gemini_embedding(text: str) -> List[float]:
@@ -309,38 +170,30 @@ def category_boost(query: str, category: str) -> float:
 # Startup/Shutdown
 @app.on_event("startup")
 async def startup_event():
-    global http_client
-    http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(30.0),
-        limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
-    )
-    logger.info("ML Service started with HuggingFace + Google Gemini")
+    logger.info("ML Service started - Gemini text embeddings enabled")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    if http_client:
-        await http_client.aclose()
     logger.info("ML Service shutdown")
 
 # API Endpoints
 @app.get("/")
 async def root():
     return {
-        "service": "Lost & Found ML Service v2.0",
+        "service": "Lost & Found ML Service v3.0",
         "features": {
-            "image_description": "HuggingFace BLIP-2 rich structured descriptions",
-            "text_embeddings": "Google Gemini text-embedding-004 (768-dim)",
-            "semantic_search": "Hybrid scoring with vector + keyword matching"
+            "text_embeddings": "Google Gemini text-embedding-004 (768-dim, normalized)",
+            "semantic_search": "Hybrid scoring with vector + keyword matching",
+            "similarity": "Cosine similarity computation helper"
         },
         "endpoints": {
-            "caption": "/caption",
             "embedding": "/embedding",
             "embeddings_batch": "/embeddings/batch",
+            "similarity": "/similarity",
             "search": "/search",
             "health": "/health"
         },
         "configuration": {
-            "hf_model": HF_MODEL,
             "embedding_dimension": EMBEDDING_DIMENSION,
             "cache_enabled": True,
             "cache_ttl_seconds": CACHE_TTL_SECONDS
@@ -352,50 +205,9 @@ async def health():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "hf_configured": bool(HF_API_TOKEN),
-        "hf_model": HF_MODEL,
         "gemini_configured": bool(GEMINI_API_KEY),
         "embedding_dimension": EMBEDDING_DIMENSION,
         "cache_size": len(embedding_cache.cache)
-    }
-
-@app.post("/caption")
-async def caption_endpoint(file: UploadFile = File(...)):
-    """
-    Generate rich structured image description.
-    Returns: ImageDescription with object type, colors, material, condition, tags.
-    """
-    try:
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception as e:
-        logger.error(f"Invalid image: {e}")
-        raise HTTPException(status_code=400, detail="Invalid image file")
-
-    colors, brightness = extract_colors_from_image(image)
-    hf_caption = await generate_hf_image_caption(contents)
-
-    if hf_caption:
-        structured = parse_caption_to_structured(hf_caption, colors, brightness)
-    else:
-        color_text = ", ".join(colors) if colors else "colored"
-        structured = ImageDescription(
-            description=f"A {brightness} {color_text} item",
-            object_type="item",
-            colors=colors,
-            material=None,
-            condition="unknown",
-            tags=colors + [brightness],
-            confidence="low"
-        )
-
-    return {
-        "success": True,
-        "caption": structured.description,
-        "structured": structured.dict(),
-        "original_caption": hf_caption or "N/A",
-        "colors_detected": colors,
-        "brightness": brightness
     }
 
 @app.post("/embedding")
@@ -434,6 +246,19 @@ async def embeddings_batch_endpoint(request: TextListRequest):
         "embeddings": embeddings,
         "count": len(embeddings)
     }
+
+@app.post("/similarity")
+async def similarity_endpoint(request: SimilarityRequest):
+    """Compute cosine similarity between two embeddings."""
+    try:
+        score = cosine_similarity(request.embedding_a, request.embedding_b)
+        return {
+            "success": True,
+            "similarity": float(score)
+        }
+    except Exception as e:
+        logger.error(f"Similarity error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/search")
 async def search_endpoint(request: SearchRequest):
