@@ -3,7 +3,7 @@ const { uploadToCloudinary } = require('../services/storageService');
 
 const createItem = async (req, res) => {
   try {
-    const { title, description, category, location, type, imageUrl } = req.body;
+    const { title, description, category, location, type, imageUrl, verificationQuestion, verificationAnswer } = req.body;
 
     const item = await Item.create({
       user: req.user._id,
@@ -13,6 +13,8 @@ const createItem = async (req, res) => {
       location: location?.toLowerCase?.() ?? '',
       type,
       imageUrl: imageUrl || '',
+      verificationQuestion: verificationQuestion || '',
+      verificationAnswer: verificationAnswer?.toLowerCase?.()?.trim?.() ?? '',
     });
 
     const populatedItem = await Item.findById(item._id).populate('user', 'name email');

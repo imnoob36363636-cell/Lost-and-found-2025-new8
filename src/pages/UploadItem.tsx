@@ -12,6 +12,8 @@ const UploadItem = () => {
   const [location, setLocation] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [verificationQuestion, setVerificationQuestion] = useState('');
+  const [verificationAnswer, setVerificationAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -48,6 +50,8 @@ const UploadItem = () => {
         category: category.toLowerCase(),
         location: location.toLowerCase(),
         imageUrl,
+        verificationQuestion,
+        verificationAnswer,
       });
 
       showToast('Item uploaded successfully!', 'success');
@@ -150,6 +154,36 @@ const UploadItem = () => {
               placeholder="Provide detailed description..."
             />
             <p className="text-xs text-gray-500 mt-1">AI will enhance this description automatically</p>
+          </div>
+
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Verification Question (Optional)</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Add a verification question to prevent unauthorized chats. Users must answer correctly before requesting contact.
+            </p>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
+              <input
+                type="text"
+                value={verificationQuestion}
+                onChange={(e) => setVerificationQuestion(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., What color is the cover of the notebook?"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 mt-4">Correct Answer</label>
+              <input
+                type="text"
+                value={verificationAnswer}
+                onChange={(e) => setVerificationAnswer(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., blue"
+              />
+              <p className="text-xs text-gray-500 mt-1">Answer is case-insensitive and trimmed automatically</p>
+            </div>
           </div>
 
           <div>

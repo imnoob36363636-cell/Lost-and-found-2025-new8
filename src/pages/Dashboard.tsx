@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import ChatRequests from '../components/Dashboard/ChatRequests';
 
 interface UserItem {
   id: string;
@@ -122,6 +123,10 @@ const Dashboard = () => {
           <Plus className="h-5 w-5" />
           <span>Upload New Item</span>
         </Link>
+      </div>
+
+      <div className="mb-8">
+        <ChatRequests />
       </div>
 
       {items.length === 0 ? (

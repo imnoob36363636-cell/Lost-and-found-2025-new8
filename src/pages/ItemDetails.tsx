@@ -4,6 +4,7 @@ import { MapPin, Calendar, User, MessageSquare, ArrowLeft } from 'lucide-react';
 import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import VerificationModal from '../components/Messaging/VerificationModal';
 
 interface RawUserObj {
   id?: string;
@@ -23,6 +24,7 @@ interface ItemDetails {
   status: string;
   type: string;
   createdAt: string;
+  verificationQuestion?: string;
   user: {
     id: string;
     _id?: string;
@@ -39,6 +41,7 @@ const ItemDetails = () => {
   const navigate = useNavigate();
   const [item, setItem] = useState<ItemDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showVerification, setShowVerification] = useState(false);
 
   /**
    * normalizeFetchedItem handles cases where raw.user can be:
@@ -167,6 +170,17 @@ const ItemDetails = () => {
       return;
     }
 
+    if (item.verificationQuestion) {
+      setShowVerification(true);
+      return;
+    }
+
+    proceedWithContact();
+  };
+
+  const proceedWithContact = async () => {
+    if (!item) return;
+
     const senderId = currentUserId;
     const recipientId = itemOwnerId;
     const itemId = String(item.id ?? item._id ?? '');
@@ -292,6 +306,18 @@ const ItemDetails = () => {
           </div>
         </div>
       </div>
+
+      {showVerification && item && item.verificationQuestion && (
+        <VerificationModal
+          itemId={String(item.id ?? item._id ?? '')}
+          question={item.verificationQuestion}
+          onClose={() => setShowVerification(false)}
+          onSuccess={() => {
+            setShowVerification(false);
+            showToast('Answer verified! Chat request sent to owner.', 'success');
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -53,6 +53,16 @@ const itemSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    verificationQuestion: {
+      type: String,
+      default: '',
+    },
+    verificationAnswer: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
   },
   { timestamps: true }
 );

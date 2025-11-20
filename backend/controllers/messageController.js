@@ -1,5 +1,7 @@
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
+const ChatRequest = require('../models/ChatRequest');
+const Item = require('../models/Item');
 const { createNotification } = require('../utils/notificationHelper');
 
 const getConversations = async (req, res) => {
@@ -90,7 +92,7 @@ const sendMessage = async (req, res) => {
     const { content } = req.body;
     const conversationId = req.params.id;
 
-    const conversation = await Conversation.findById(conversationId);
+    const conversation = await Conversation.findById(conversationId).populate('item');
 
     if (!conversation) {
       return res.status(404).json({ message: 'Conversation not found' });
@@ -98,6 +100,20 @@ const sendMessage = async (req, res) => {
 
     if (!conversation.participants.includes(req.user._id)) {
       return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    if (conversation.item && conversation.item.verificationQuestion) {
+      const chatRequest = await ChatRequest.findOne({
+        item: conversation.item._id,
+        requester: req.user._id,
+        status: 'approved',
+      });
+
+      if (!chatRequest) {
+        return res.status(403).json({
+          message: 'Chat verification not approved. Answer the verification question first.',
+        });
+      }
     }
 
     const message = await Message.create({
